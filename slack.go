@@ -1,3 +1,27 @@
+/*
+
+mybot - Illustrative Slack bot in Go
+
+Copyright (c) 2015 RapidLoop
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
 
 package main
 
@@ -8,22 +32,18 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
-
 	"golang.org/x/net/websocket"
 )
 
-// These two structures represent the response of the Slack API rtm.start.
+// responseRtmStart represent the response of the Slack API rtm.start.
 // Only some fields are included. The rest are ignored by json.Unmarshal.
-
 type responseRtmStart struct {
-	Ok    bool         `json:"ok"`
-	Error string       `json:"error"`
-	Url   string       `json:"url"`
-	Self  responseSelf `json:"self"`
-}
-
-type responseSelf struct {
-	Id string `json:"id"`
+	Ok    bool   `json:"ok"`
+	Error string `json:"error"`
+	URL   string `json:"url"`
+	Self  struct {
+		ID string `json:"id"`
+	} `json:"self"`
 }
 
 // slackStart does a rtm.start, and returns a websocket URL and user ID. The
@@ -34,15 +54,17 @@ func slackStart(token string) (wsurl, id string, err error) {
 	if err != nil {
 		return
 	}
-	if resp.StatusCode != 200 {
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf("API request failed with code %d", resp.StatusCode)
 		return
 	}
 	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
 	if err != nil {
 		return
 	}
+
 	var respObj responseRtmStart
 	err = json.Unmarshal(body, &respObj)
 	if err != nil {
@@ -54,20 +76,25 @@ func slackStart(token string) (wsurl, id string, err error) {
 		return
 	}
 
-	wsurl = respObj.Url
-	id = respObj.Self.Id
+	wsurl = respObj.URL
+	id = respObj.Self.ID
 	return
 }
 
-// These are the messages read off and written into the websocket. Since this
+// Message represents the messages read off and written into the websocket. Since this
 // struct serves as both read and write, we include the "Id" field which is
 // required only for writing.
-
 type Message struct {
-	Id      uint64 `json:"id"`
+	ID      uint64 `json:"id"`
 	Type    string `json:"type"`
 	Channel string `json:"channel"`
+	User    string `json:"user"`
 	Text    string `json:"text"`
+	Error   struct {
+		// Error is only populated if an error is present. Check for type == "error"
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
 }
 
 func getMessage(ws *websocket.Conn) (m Message, err error) {
@@ -78,7 +105,7 @@ func getMessage(ws *websocket.Conn) (m Message, err error) {
 var counter uint64
 
 func postMessage(ws *websocket.Conn, m Message) error {
-	m.Id = atomic.AddUint64(&counter, 1)
+	m.ID = atomic.AddUint64(&counter, 1)
 	return websocket.JSON.Send(ws, m)
 }
 
