@@ -26,7 +26,6 @@ THE SOFTWARE.
 package main
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -37,8 +36,8 @@ import (
 )
 
 type DogResp struct {
-	Success     string
-	Message		string
+	Success string
+	Message string
 }
 
 func main() {
@@ -68,15 +67,14 @@ func main() {
 		if m.Type == "message" && strings.HasPrefix(m.Text, "<@"+id+">") {
 			// if so try to parse if
 			parts := strings.Fields(m.Text)
-			if len(parts) == 3 && parts[1] == "stock" {
-				// looks good, get the quote and reply with the result
-				go func(m Message) {
-					m.Text = getQuote(parts[2])
-					postMessage(ws, m)
-				}(m)
-			} else if len(parts) == 2 && parts[1] == "friends" {
+			if len(parts) == 2 && parts[1] == "dogs" {
 				go func(m Message) {
 					m.Text = getDog()
+					postMessage(ws, m)
+				}(m)
+			} else if len(parts) == 3 && parts[1] == "issue" && parts[2] == "count" {
+				go func(m Message) {
+					m.Text = issueCredits()
 					postMessage(ws, m)
 				}(m)
 			} else if len(parts) == 2 && parts[1] == "pet" {
@@ -93,7 +91,6 @@ func main() {
 	}
 }
 
-
 // Gets dog images
 func getDog() string {
 	resp, err := http.Get("https://dog.ceo/api/breeds/image/random")
@@ -107,21 +104,14 @@ func getDog() string {
 	return dogs.Message
 }
 
-// Get the quote via Yahoo. You should replace this method to something
-// relevant to your team!
-func getQuote(sym string) string {
-	sym = strings.ToUpper(sym)
-	url := fmt.Sprintf("http://download.finance.yahoo.com/d/quotes.csv?s=%s&f=nsl1op&e=.csv", sym)
-	resp, err := http.Get(url)
+func issueCredits() string {
+	resp, err := http.Get("https://www.drupal.org/api-d7/node/2497975.json")
 	if err != nil {
-		return fmt.Sprintf("error: %v", err)
+		log.Fatal(err)
 	}
-	rows, err := csv.NewReader(resp.Body).ReadAll()
-	if err != nil {
-		return fmt.Sprintf("error: %v", err)
-	}
-	if len(rows) >= 1 && len(rows[0]) == 5 {
-		return fmt.Sprintf("%s (%s) is trading at $%s", rows[0][0], rows[0][1], rows[0][2])
-	}
-	return fmt.Sprintf("unknown response format (symbol was \"%s\")", sym)
+	defer resp.Body.Close()
+	input, err := ioutil.ReadAll(resp.Body)
+	var org map[string]interface{}
+	json.Unmarshal(input, &org)
+	return org["title"].(string) + " issue count is " + org["field_org_issue_credit_count"].(string)
 }
