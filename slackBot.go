@@ -82,6 +82,15 @@ func main() {
 					m.Text = "tail wags"
 					postMessage(ws, m)
 				}(m)
+			} else if len(parts) == 2 && parts[1] == "help" {
+				go func(m Message) {
+					// String literals with back tics capture line breaks. Neato!
+					m.Text = `Commands:
+@lexie *issue count*: Displays the number of issue credits for MG.
+@lexie *dogs*: Fetches awesome dog images.
+@lexie *pet*: love you friendly bot.`
+					postMessage(ws, m)
+				}(m)
 			} else {
 				// huh?
 				m.Text = fmt.Sprintf("sorry, that does not compute\n")
@@ -89,19 +98,6 @@ func main() {
 			}
 		}
 	}
-}
-
-// Gets dog images
-func getDog() string {
-	resp, err := http.Get("https://dog.ceo/api/breeds/image/random")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	input, err := ioutil.ReadAll(resp.Body)
-	var dogs DogResp
-	json.Unmarshal(input, &dogs)
-	return dogs.Message
 }
 
 func issueCredits() string {
